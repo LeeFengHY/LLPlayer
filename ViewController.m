@@ -234,7 +234,7 @@ int simplest_flv_parser(char *url)
                         strcat(audiotag_str, "UNKNOWN");
                         break;
                 }
-                //音频
+                //音频类型
                 strcat(audiotag_str,"| ");
                 x=tagdata_first_byte&0x01;
                 switch (x)
