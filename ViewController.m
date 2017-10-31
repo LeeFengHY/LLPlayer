@@ -67,12 +67,12 @@ uint reverse_bytes(byte *p, char c)
     return r;
 }
 
+#if 1
 int simplest_flv_parser(char *url)
 {
     int output_a = 1;
     int output_v = 1;
     FILE *ifh = NULL,*vfh = NULL, *afh = NULL;
-    //FILE *myout=fopen("output_log.txt","wb+");
     FILE *myout = stdout;
     FLV_HEADER flv;
     TAG_HEADER tagheader;
@@ -86,7 +86,7 @@ int simplest_flv_parser(char *url)
     }
     
     //FLV file header
-    fread(&flv, 1, sizeof(FLV_HEADER), ifh);
+    fread((char *)&flv, 1, sizeof(FLV_HEADER), ifh);
     fprintf(myout, "============== FLV Header ==============\n");
     fprintf(myout, "Signature:  0x%c %c %c\n",flv.Signature[0],flv.Signature[1],flv.Signature[2]);
     fprintf(myout, "Version:    0x%X\n",flv.Version);
@@ -100,43 +100,56 @@ int simplest_flv_parser(char *url)
     do {
         //flv body里面各个tagheader是相同的，tag data则不同类型的tag data部分结构不相同。
         previous_tag_size = getw(ifh);
+        
         fread((void *)&tagheader, sizeof(TAG_HEADER), 1, ifh);
+        
         int tagheader_datasize = tagheader.DataSize[0] * 65536 + tagheader.DataSize[1] * 256 + tagheader.DataSize[2];
         int tagheader_timestamp = tagheader.Timestamp[0] * 65536 + tagheader.Timestamp[1] * 256 + tagheader.Timestamp[2];
+        
         char tagtype_str[10];
         switch (tagheader.TagType) {
             case TAG_TYPE_AUDIO:
+            {
                 sprintf(tagtype_str, "AUDIO");
                 break;
+            }
             case TAG_TYPE_VIDEO:
+            {
                 sprintf(tagtype_str, "VIDEO");
                 break;
+            }
             case TAG_TYPE_SCRIPT:
+            {
                 sprintf(tagtype_str, "SCRIPT");
                 break;
+            }
             default:
+            {
                 sprintf(tagtype_str, "UNKNOWN");
                 break;
+            }
         }
-        fprintf(myout, "[%6s] %6d %6d |",tagtype_str,tagheader_datasize,tagheader_timestamp);
+        fprintf(myout,"[%6s] %6d %6d |",tagtype_str,tagheader_datasize,tagheader_timestamp);
         //if we are not past the end of file, process the tag
         if (feof(ifh)) {
             break;
         }
         //processing tag by type
-        switch (tagheader.TagType) {
+        switch (tagheader.TagType)
+        {
             //处理音频
             case TAG_TYPE_AUDIO:
             {
-                char audiotag_str[100] = {0};
-                strcat(audiotag_str, "| ");
+                char audiotag_str[100]={0};
+                strcat(audiotag_str,"| ");
                 char tagdata_first_byte;
-                tagdata_first_byte = fgetc(ifh);
-                int x = tagdata_first_byte&0xF0;
+                tagdata_first_byte=fgetc(ifh);
+                int x=tagdata_first_byte&0xF0;
                 //因为前4个字节表示前tag的长度，因此要右移4位
                 x = x>>4;
                 //音频编码类型
-                switch (x) {
+                switch (x)
+                {
                     case 0:
                         strcat(audiotag_str, "Linear PCM, platform endian");
                         break;
@@ -208,7 +221,8 @@ int simplest_flv_parser(char *url)
                 
                 strcat(audiotag_str, "| ");
                 //音频采样精度
-                x = tagdata_first_byte&0x02;
+                x=tagdata_first_byte&0x02;
+                x=x>>1;
                 switch (x) {
                     case 0:
                         strcat(audiotag_str, "8Bit");
@@ -220,13 +234,22 @@ int simplest_flv_parser(char *url)
                         strcat(audiotag_str, "UNKNOWN");
                         break;
                 }
+                //音频
+                strcat(audiotag_str,"| ");
+                x=tagdata_first_byte&0x01;
+                switch (x)
+                {
+                    case 0:strcat(audiotag_str,"Mono");break;
+                    case 1:strcat(audiotag_str,"Stereo");break;
+                    default:strcat(audiotag_str,"UNKNOWN");break;
+                }
                 fprintf(myout, "%s",audiotag_str);
                 //if the output file hasn't been opened, open it.
                 if (output_a != 0 && afh == NULL) {
                     afh = fopen("/Users/moxian/Desktop/lp_截图/LeePlayer/output.mp3", "wb");
                 }
                 //TagData - First Byte Data
-                int data_size = reverse_bytes((byte *)tagheader.DataSize, sizeof(tagheader.DataSize)) - 1;
+                int data_size = reverse_bytes((byte *)&tagheader.DataSize, sizeof(tagheader.DataSize)) - 1;
                 if (output_a != 0) {
                     for (int i = 0; i < data_size; i++) {
                         fputc(fgetc(ifh), afh);
@@ -236,12 +259,13 @@ int simplest_flv_parser(char *url)
                         fgetc(ifh);
                     }
                 }
-            }break;
+                break;
+            }
             //处理视频Video Tag Data结构
             case TAG_TYPE_VIDEO:
             {
-                char videotag_str[100] = {0};
-                strcat(videotag_str, "| ");
+                char videotag_str[100]={0};
+                strcat(videotag_str,"| ");
                 char tagdata_first_byte;
                 tagdata_first_byte = fgetc(ifh);
                 int x = tagdata_first_byte&0xF0;
@@ -292,7 +316,7 @@ int simplest_flv_parser(char *url)
                         strcat(videotag_str, "Screen video version 2");
                         break;
                     case 7:
-                        strcat(videotag_str, " AVC");
+                        strcat(videotag_str, "AVC");
                         break;
                     default:
                         strcat(videotag_str, "UNKNOWN");
@@ -305,9 +329,10 @@ int simplest_flv_parser(char *url)
                     //wb 只写打开或新建一个二进制文件；只允许写数据。
                     //打开output.flv文件
                     vfh = fopen("/Users/moxian/Desktop/lp_截图/LeePlayer/output.flv", "wb");
-                    fwrite(&flv, 1, sizeof(flv), vfh);
-                    fwrite(&previous_tag_size_z, 1, sizeof(previous_tag_size_z), vfh);
+                    fwrite((char *)&flv, 1, sizeof(flv), vfh);
+                    fwrite((char *)&previous_tag_size_z, 1, sizeof(previous_tag_size_z), vfh);
                 }
+#if 0
                 //Change Timestamp
                 //Get Timestamp
                 ts = reverse_bytes((byte *)&tagheader.Timestamp, sizeof(tagheader.Timestamp));
@@ -315,22 +340,24 @@ int simplest_flv_parser(char *url)
                 //Writeback Timestamp
                 ts_new = reverse_bytes((byte *)&ts, sizeof(ts));
                 memcpy(&tagheader.Timestamp, ((char *)&ts_new) + 1, sizeof(tagheader.Timestamp));
-                
+#endif
                 //TagData + Previous Tag Size
                 int data_size = reverse_bytes((byte *)&tagheader.DataSize, sizeof(tagheader.DataSize)) + 4;
                 if (output_v != 0) {
                     //TagHeader
-                    fwrite((char *)&tagheader, 1, sizeof(tagheader), vfh);
+                    fwrite((char *)&tagheader,1, sizeof(tagheader),vfh);
                     //TagData
                     for (int i = 0; i < data_size; i++) {
-                        fputc(fgetc(ifh), vfh);
+                        fputc(fgetc(ifh),vfh);
                     }
                 }else{
                     for (int i = 0; i < data_size; i++) {
                         fgetc(ifh);
                     }
                 }
-            }break;
+                fseek(ifh, -4, SEEK_CUR);
+                break;
+            }
             default:
                 //skip the data of this tag
                 fseek(ifh, reverse_bytes((byte *)&tagheader.DataSize, sizeof(tagheader.DataSize)), SEEK_CUR);
@@ -343,7 +370,7 @@ int simplest_flv_parser(char *url)
     fclose(myout);
     return 0;
 }
-
+#endif
 @interface ViewController ()<ClassButtonDelegate>
 {
     NSMutableArray *_infons;
